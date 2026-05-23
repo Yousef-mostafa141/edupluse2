@@ -1,6 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   User, Shield, Palette, Globe, Bell, Bot, Lock, Accessibility, Info, LogOut,
@@ -22,7 +23,23 @@ const sections = [
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { locale, setLocale, userName, setUserName } = useApp();
+  const { locale, setLocale, userName, setUserName, grades, addGrade, userProfile } = useApp();
+  const [subject, setSubject] = useState("");
+  const [score, setScore] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleAddGrade = () => {
+    const scoreValue = Number(score);
+    if (!subject.trim() || !score.trim() || Number.isNaN(scoreValue) || scoreValue < 0 || scoreValue > 100) {
+      setMessage("Enter a valid subject and score between 0 and 100.");
+      return;
+    }
+
+    addGrade({ subject: subject.trim(), score: scoreValue, date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }) });
+    setSubject("");
+    setScore("");
+    setMessage("Grade added successfully.");
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -38,8 +55,50 @@ export default function SettingsPage() {
             onChange={(e) => setUserName(e.target.value)}
             className="font-bold text-lg bg-transparent outline-none border-b border-transparent focus:border-accent-primary/50 w-full"
           />
-          <p className="text-sm text-muted">Grade 11 • Level 3</p>
+          <p className="text-sm text-muted">{userProfile?.grade || "Grade not set"} • Level {Math.max(1, Math.floor((grades.length * 2 + 1) / 5))}</p>
         </div>
+      </div>
+
+      <div className="glass-card rounded-2xl p-6 space-y-4">
+        <h2 className="font-semibold">Add Grade</h2>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject"
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] outline-none"
+          />
+          <input
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            placeholder="Score (0-100)"
+            type="number"
+            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] outline-none"
+          />
+        </div>
+        <button
+          onClick={handleAddGrade}
+          className="w-full rounded-2xl bg-accent-primary px-4 py-3 text-white font-semibold hover:opacity-90 transition"
+        >
+          Save Grade
+        </button>
+        {message && <p className="text-sm text-muted">{message}</p>}
+        {grades.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Recent Grades</p>
+            <div className="grid gap-2">
+              {grades.slice(-4).reverse().map((grade, index) => (
+                <div key={`${grade.subject}-${index}`} className="glass-card p-3 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{grade.subject}</p>
+                    <p className="text-xs text-muted">{grade.date}</p>
+                  </div>
+                  <span className="text-sm font-bold">{grade.score}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="glass-card rounded-2xl overflow-hidden divide-y divide-[var(--border)]">

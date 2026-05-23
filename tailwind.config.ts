@@ -11,24 +11,24 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          bg: "#0B1020",
-          bg2: "#121A2F",
-          card: "#1B2540",
+          bg: "var(--surface-bg)",
+          bg2: "var(--bg-secondary)",
+          card: "var(--bg-card)",
         },
         light: {
-          bg: "#F5F7FF",
-          card: "#FFFFFF",
-          border: "#E5E7EB",
+          bg: "var(--bg-primary)",
+          card: "var(--bg-card)",
+          border: "var(--border)",
         },
         accent: {
-          primary: "#6C63FF",
-          secondary: "#00D4FF",
-          "secondary-light": "#00B8D9",
+          primary: "var(--accent)",
+          secondary: "var(--accent-cyan)",
+          "secondary-light": "var(--accent-cyan)",
         },
         success: "#22C55E",
         warning: "#F59E0B",
         danger: "#EF4444",
-        muted: "#A1A1AA",
+        muted: "var(--text-secondary)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],

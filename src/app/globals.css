@@ -4,24 +4,42 @@
 
 @layer base {
   :root {
-    --bg-primary: #F5F7FF;
-    --bg-secondary: #FFFFFF;
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F9FAFB;
     --bg-card: #FFFFFF;
+    --surface-bg: #FFFFFF;
     --text-primary: #111827;
     --text-secondary: #6B7280;
     --accent: #6C63FF;
     --accent-cyan: #00B8D9;
     --border: #E5E7EB;
-    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-bg: rgba(255, 255, 255, 0.9);
     --glass-border: #E5E7EB;
-    --glass-panel-bg: rgba(255, 255, 255, 0.1);
-    --glass-panel-border: rgba(255, 255, 255, 0.2);
+    --glass-panel-bg: rgba(255, 255, 255, 0.6);
+    --glass-panel-border: rgba(108, 99, 255, 0.2);
+  }
+
+  [data-theme="light"] {
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F9FAFB;
+    --bg-card: #FFFFFF;
+    --surface-bg: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --accent: #6C63FF;
+    --accent-cyan: #00B8D9;
+    --border: #E5E7EB;
+    --glass-bg: rgba(255, 255, 255, 0.9);
+    --glass-border: #E5E7EB;
+    --glass-panel-bg: rgba(255, 255, 255, 0.6);
+    --glass-panel-border: rgba(108, 99, 255, 0.2);
   }
 
   [data-theme="dark"] {
     --bg-primary: #0B1020;
     --bg-secondary: #121A2F;
     --bg-card: #1B2540;
+    --surface-bg: #0B1020;
     --text-primary: #FFFFFF;
     --text-secondary: #A1A1AA;
     --accent: #6C63FF;

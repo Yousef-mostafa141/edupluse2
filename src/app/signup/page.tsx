@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -13,6 +13,7 @@ import { useApp, UserProfile } from "@/context/app-context";
 export default function SignupPage() {
   const { t, signup } = useApp();
   const router = useRouter();
+  const [isGoogle, setIsGoogle] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     nickname: "",
@@ -21,6 +22,13 @@ export default function SignupPage() {
     email: "",
     password: "",
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setIsGoogle(params.get("method") === "google");
+    }
+  }, []);
   const [error, setError] = useState("");
 
   const handleChange = (key: keyof UserProfile | "password") =>
@@ -87,7 +95,14 @@ export default function SignupPage() {
             <div className="w-10 h-10 rounded-xl bg-accent-gradient flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-display font-bold">{t("signup")}</h1>
+            <div>
+              <h1 className="text-2xl font-display font-bold">{isGoogle ? "Google account setup" : t("signup")}</h1>
+              {isGoogle && (
+                <p className="text-sm text-muted mt-1">
+                  Continue with Google by entering your name, birth date, email, and a password.
+                </p>
+              )}
+            </div>
           </div>
 
           <form className="space-y-4" onSubmit={handleSignup}>
@@ -98,6 +113,7 @@ export default function SignupPage() {
                   value={formData[f.key]}
                   onChange={handleChange(f.key)}
                   type={f.type}
+                  placeholder={f.type === "email" ? "yourname@gmail.com" : undefined}
                   className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none transition-colors"
                 />
               </div>

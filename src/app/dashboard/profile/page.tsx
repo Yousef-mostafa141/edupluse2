@@ -14,7 +14,7 @@ const achievements = [
 ];
 
 export default function ProfilePage() {
-  const { userName, xp, streak, level } = useApp();
+  const { userName, xp, streak, level, userProfile } = useApp();
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -25,7 +25,7 @@ export default function ProfilePage() {
             {userName[0]}
           </div>
           <h1 className="text-2xl font-display font-bold">{userName}</h1>
-          <p className="text-muted">Grade 11 Student</p>
+          <p className="text-muted">{userProfile?.grade ? `Grade ${userProfile.grade}` : "New student"}</p>
           <div className="flex justify-center gap-6 mt-6">
             <div>
               <p className="text-2xl font-bold text-accent-primary">LVL {level}</p>

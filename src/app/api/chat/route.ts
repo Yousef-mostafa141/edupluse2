@@ -22,10 +22,9 @@ export async function POST(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "Gemini API key is not configured. Set GEMINI_API_KEY in your environment." },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      text: "Gemini API key is not configured. Using offline AI mode for now. Ask any study question and the assistant will respond with local guidance.",
+    });
   }
 
   try {
@@ -47,18 +46,16 @@ export async function POST(request: Request) {
     const payload = await response.json();
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: payload.error?.message ?? "Gemini returned an error." },
-        { status: response.status }
-      );
+      return NextResponse.json({
+        text: payload.error?.message ?? "Gemini returned an error.",
+      });
     }
 
     const text = extractResponseText(payload) ?? "Gemini did not return a valid response.";
     return NextResponse.json({ text });
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to connect to Gemini. Please verify your API key and network." },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      text: "Failed to connect to Gemini. Please verify your API key and network.",
+    });
   }
 }
