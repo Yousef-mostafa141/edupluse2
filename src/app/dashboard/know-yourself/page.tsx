@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Heart, Send } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { AnimatedChart } from "@/components/ui/animated-chart";
+import { TypingIndicator } from "@/components/ui/typing-indicator";
 
 const moodData = [
   { name: "Mon", value: 70 },
@@ -21,18 +22,40 @@ export default function KnowYourselfPage() {
     { role: "ai", text: "I'm here for you. This is a safe space — share whatever is on your mind. 💙" },
   ]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const send = () => {
+  const send = async () => {
     if (!input.trim()) return;
-    setMessages((m) => [
-      ...m,
-      { role: "user", text: input },
-      {
-        role: "ai",
-        text: "Thank you for sharing that with me. It's completely normal to feel this way. Remember, taking breaks and being kind to yourself is just as important as studying. Would you like to try a short breathing exercise?",
-      },
-    ]);
+    const prompt = input.trim();
+    setMessages((current) => [...current, { role: "user", text: prompt }]);
     setInput("");
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.text || "Unable to connect to the support assistant.");
+      }
+
+      setMessages((current) => [...current, { role: "ai", text: data.text }]);
+    } catch (err: any) {
+      const message = err?.message || "Something went wrong. Please try again later.";
+      setMessages((current) => [
+        ...current,
+        { role: "ai", text: `There was an issue reaching the AI assistant: ${message}` },
+      ]);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const meters = [
@@ -73,6 +96,7 @@ export default function KnowYourselfPage() {
                   </div>
                 </motion.div>
               ))}
+              {loading && <TypingIndicator />}
             </div>
             <div className="flex gap-2">
               <input
@@ -80,15 +104,18 @@ export default function KnowYourselfPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
                 placeholder="Share how you're feeling..."
-                className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 outline-none text-sm focus:border-accent-primary/30"
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 outline-none text-sm focus:border-accent-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
               <button
                 onClick={send}
-                className="p-2.5 rounded-xl bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30"
+                disabled={loading || !input.trim()}
+                className="p-2.5 rounded-xl bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Send className="w-5 h-5" />
               </button>
             </div>
+            {error && <p className="text-sm text-danger mt-2">{error}</p>}
           </div>
         </div>
 

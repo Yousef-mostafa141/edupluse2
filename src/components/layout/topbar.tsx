@@ -1,11 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Search, Bell, Flame, Menu, LogOut } from "lucide-react";
 import { useApp } from "@/context/app-context";
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { t, xp, streak, level, userName, logout } = useApp();
+  const [notificationCount, setNotificationCount] = useState(0);
+  const router = useRouter();
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch("/api/announcements");
+        if (!response.ok) return;
+        const data = await response.json();
+        setNotificationCount(Array.isArray(data) ? data.length : 0);
+      } catch {
+        setNotificationCount(0);
+      }
+    };
+
+    loadNotifications();
+  }, []);
 
   return (
     <header className="h-16 flex items-center justify-between px-4 lg:px-6 border-b border-[var(--border)] glass sticky top-0 z-30">
@@ -54,9 +73,15 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <motion.button
           className="relative p-2 rounded-xl hover:bg-white/5"
           whileHover={{ scale: 1.05 }}
+          onClick={() => router.push("/dashboard/notifications")}
+          title={t("notifications")}
         >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full" />
+          {notificationCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-4 px-1 text-[10px] text-white bg-danger rounded-full flex items-center justify-center">
+              {notificationCount}
+            </span>
+          )}
         </motion.button>
 
         <button

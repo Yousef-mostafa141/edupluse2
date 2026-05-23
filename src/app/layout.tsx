@@ -5,7 +5,7 @@ import {
   Sora,
   Cairo,
 } from "next/font/google";
-import { ThemeProvider } from "next-themes";
+import ThemeProviderClient from "@/components/theme-provider-client";
 import { AppProvider } from "@/context/app-context";
 import "./globals.css";
 
@@ -49,9 +49,11 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                const theme = localStorage.getItem('edupulse-theme') || 'dark';
+                const stored = localStorage.getItem('edupulse-theme');
+                const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const theme = stored || (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
-              } catch (e) {}
+              } catch (e) { /* ignore */ }
             `,
           }}
         />
@@ -59,15 +61,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${poppins.variable} ${sora.variable} ${cairo.variable} font-sans`}
       >
-        <ThemeProvider
-          attribute="data-theme"
-          defaultTheme="dark"
-          enableSystem
-          storageKey="edupulse-theme"
-          disableTransitionOnChange
-        >
+        <ThemeProviderClient>
           <AppProvider>{children}</AppProvider>
-        </ThemeProvider>
+        </ThemeProviderClient>
       </body>
     </html>
   );

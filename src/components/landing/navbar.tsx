@@ -34,9 +34,10 @@ export function Navbar() {
           <button
             onClick={() => setLocale(locale === "en" ? "ar" : "en")}
             className="p-2 rounded-xl hover:bg-white/5 flex items-center gap-1 text-sm"
+            title={`Switch language`}
           >
             <Globe className="w-4 h-4" />
-            {locale === "en" ? "AR" : "EN"}
+            {locale.toUpperCase()}
           </button>
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

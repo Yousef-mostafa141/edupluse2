@@ -19,38 +19,60 @@ export async function POST(request: Request) {
       });
     }
 
-    // Call official Google AI Studio Gemini API Endpoint
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    // Call official Google AI Studio Gemini API Endpoint using Authorization header
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let attempt = 0;
+    let payload: any = null;
+    let response: Response | null = null;
+    while (attempt < 2) {
+      attempt++;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
               {
-                text: message,
+                parts: [
+                  {
+                    text: message,
+                  },
+                ],
               },
             ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        },
-      }),
-    });
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            },
+          }),
+        });
 
-    const payload = await response.json();
+        payload = await response.json();
+        if (response.ok) break;
+        console.warn("Gemini attempt failed:", { attempt, status: response.status, payload });
+      } catch (err: any) {
+        console.error("Gemini fetch error attempt", attempt, err?.message || err);
+        if (err.name === "AbortError") {
+          // timeout
+        }
+      }
+    }
 
-    if (!response.ok) {
+    clearTimeout(timeout);
+
+    if (!response || !response.ok) {
       console.error("Gemini API error payload:", payload);
       return NextResponse.json({
-        text: `Gemini API returned an error: ${payload.error?.message ?? "Unknown error"}. Please check your key configuration.`,
-      });
+        text: `Gemini API returned an error: ${payload?.error?.message ?? "Unknown error or timeout"}.`,
+      }, { status: 502 });
     }
 
     const aiText = payload.candidates?.[0]?.content?.parts?.[0]?.text;

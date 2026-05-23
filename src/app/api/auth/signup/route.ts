@@ -2,29 +2,41 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { signToken } from "@/lib/jwt";
+import { APIResponse, sanitizeEmail, validateRequired } from "@/lib/api-utils";
+
+const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { fullName, nickname, birthDate, grade, email, password } = body;
 
-    if (!fullName || !email || !password) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const missingField = validateRequired(body, ["fullName", "email", "password"]);
+    if (missingField) {
+      return APIResponse.error(missingField, 400);
+    }
+
+    const normalizedEmail = sanitizeEmail(email);
+    if (!emailPattern.test(normalizedEmail)) {
+      return APIResponse.error("Please provide a valid email address.", 400);
+    }
+
+    if (typeof password !== "string" || password.length < 8) {
+      return APIResponse.error("Password must be at least 8 characters.", 400);
     }
 
     const existingUser = await db.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 400 });
+      return APIResponse.error("Email already registered.", 400);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Determine role: default is student, unless special email prefix is used
     let role = "student";
-    const emailLower = email.toLowerCase();
+    const emailLower = normalizedEmail;
     if (emailLower.startsWith("admin")) {
       role = "admin";
     } else if (emailLower.startsWith("teacher")) {
@@ -39,7 +51,7 @@ export async function POST(request: Request) {
         nickname: nickname || fullName,
         birthDate: birthDate || null,
         grade: grade || "N/A",
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         password: hashedPassword,
         role,
         xp: 0,
@@ -81,6 +93,9 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error("Signup error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (error?.code === "P2002") {
+      return APIResponse.error("Email already registered.", 400);
+    }
+    return APIResponse.serverError();
   }
 }

@@ -83,9 +83,9 @@ interface AppContextType {
   setUserName: (n: string) => void;
   isAuthenticated: boolean;
   authLoaded: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  googleLogin: (idToken: string) => Promise<boolean>;
-  signup: (profile: UserProfile, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  googleLogin: (idToken?: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (profile: UserProfile, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   userProfile: UserProfile | null;
   updateProfileAndSettings: (updates: Partial<UserProfile> & { currentPassword?: string; newPassword?: string }) => Promise<boolean>;
@@ -197,15 +197,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addXp = useCallback(async (amount: number) => {
+    // Optimistic UI update
     setXp((prev) => prev + amount);
-    if (isAuthenticated && userProfile?.email !== "guest@edupulse.ai") {
-      await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xp: xp + amount }),
-      });
+    if (isAuthenticated) {
+      try {
+        const res = await fetch("/api/xp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.xp !== undefined) setXp(data.xp);
+        } else {
+          // Re-fetch authoritative value
+          await refreshUserData();
+        }
+      } catch (err) {
+        console.error("Failed to persist XP:", err);
+        await refreshUserData();
+      }
     }
-  }, [isAuthenticated, userProfile, xp]);
+  }, [isAuthenticated, refreshUserData]);
 
   // 2. Database Sync Helper Functions
   const addGrade = useCallback(async (grade: GradeEntry) => {
@@ -269,10 +282,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ id, ...updates }),
       });
       if (res.ok) {
-        const updated = await res.json();
+        const data = await res.json();
+        const updatedTask = data.task || data;
         setTasks((prev) =>
-          prev.map((task) => (task.id === id ? updated : task))
+          prev.map((task) => (task.id === id ? updatedTask : task))
         );
+        if (data.xp !== undefined) {
+          setXp(data.xp);
+        }
         return true;
       }
     } catch (err) {
@@ -402,38 +419,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      
+      const data = await res.json();
+
       if (res.ok) {
         await refreshUserData();
-        return true;
+        return { success: true };
       }
+
+      return { success: false, error: data.error || "Login failed. Please check your credentials." };
     } catch (err) {
       console.error(err);
+      return { success: false, error: "Unable to reach the server. Please try again." };
     }
-    return false;
   }, [refreshUserData]);
 
-  const googleLogin = useCallback(async (idToken: string) => {
-    try {
-      const res = await fetch("/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-      
-      if (res.ok) {
-        await refreshUserData();
-        return true;
-      }
-    } catch (err) {
-      console.error(err);
+  const googleLogin = useCallback(async (idToken?: string) => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/api/auth/google";
+      return { success: true };
     }
-    return false;
-  }, [refreshUserData]);
+    return { success: false, error: "Google login is only available in the browser." };
+  }, []);
 
   const loginAsGuest = useCallback(() => {
     console.warn("Guest login is no longer supported - use email/password or Google OAuth");
-    return;
+    return { success: false, error: "Guest login is disabled." };
   }, []);
 
   const signup = useCallback(async (profile: UserProfile, password: string) => {
@@ -443,15 +453,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...profile, password }),
       });
-      
+      const data = await res.json();
+
       if (res.ok) {
         await refreshUserData();
-        return true;
+        return { success: true };
       }
+
+      return { success: false, error: data.error || "Unable to create account. Please try again." };
     } catch (err) {
       console.error("Signup error:", err);
+      return { success: false, error: "Unable to reach the server. Please try again." };
     }
-    return false;
   }, [refreshUserData]);
 
   const updateProfileAndSettings = useCallback(async (updates: Partial<UserProfile> & { currentPassword?: string; newPassword?: string }) => {
@@ -481,6 +494,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     return false;
   }, [isAuthenticated]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      setIsAuthenticated(false);
+      setUserProfile(null);
+      setUserName("");
+      setXp(0);
+      setStreak(0);
+      setGrades([]);
+      setTasks([]);
+      setGoals([]);
+      setSessions([]);
+      setLocaleState("en");
+      setThemeState("dark");
+      document.documentElement.lang = "en";
+      document.documentElement.dir = "ltr";
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  }, []);
 
   return (
     <AppContext.Provider

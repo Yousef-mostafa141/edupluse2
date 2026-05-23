@@ -25,15 +25,7 @@ export function Footer() {
         </div>
 
         <div className="flex gap-4">
-          {[Twitter, Github, Linkedin, Mail].map((Icon, i) => (
-            <Link
-              key={i}
-              href="#"
-              className="w-10 h-10 rounded-xl glass flex items-center justify-center hover:border-accent-primary/50 transition-all hover:shadow-glow"
-            >
-              <Icon className="w-4 h-4" />
-            </Link>
-          ))}
+          <Link href="#" className="text-sm text-muted">{t("contactSupport")}</Link>
         </div>
       </div>
       <p className="text-center text-xs text-muted mt-8">

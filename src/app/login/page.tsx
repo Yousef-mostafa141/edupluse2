@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Sparkles, Mail, Sun, Moon, Globe } from "lucide-react";
-import { useTheme } from "next-themes";
 import { Particles } from "@/components/ui/particles";
 import { AIOrb } from "@/components/ui/ai-orb";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/context/app-context";
 
 export default function LoginPage() {
-  const { t, locale, setLocale, login, isAuthenticated, authLoaded } = useApp();
-  const { theme, setTheme } = useTheme();
+  const { t, locale, setLocale, login, isAuthenticated, authLoaded, theme, setTheme } = useApp();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -26,21 +25,29 @@ export default function LoginPage() {
     }
   }, [authLoaded, isAuthenticated, router]);
 
+  useEffect(() => {
+    if (!searchParams) return;
+    const googleError = searchParams.get("error");
+    if (googleError) {
+      setError(decodeURIComponent(googleError));
+    }
+  }, [searchParams]);
+
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsLoading(true);
     setError("");
-    const success = await login(email, password);
+    const result = await login(email, password);
     setIsLoading(false);
-    if (success) {
+    if (result.success) {
       router.push("/dashboard");
     } else {
-      setError("Login failed. Please check your email and password.");
+      setError(result.error || "Login failed. Please check your email and password.");
     }
   };
 
   const handleGoogle = () => {
-    router.push("/signup?method=google");
+    window.location.href = "/api/auth/google";
   };
 
   return (
@@ -59,10 +66,10 @@ export default function LoginPage() {
             <button
               onClick={() => setLocale(locale === "en" ? "ar" : "en")}
               className="p-2 rounded-xl hover:bg-white/5 flex items-center gap-1 text-sm transition-colors"
-              title={`Switch to ${locale === "en" ? "Arabic" : "English"}`}
+              title={`Switch language`}
             >
               <Globe className="w-4 h-4" />
-              <span className="hidden sm:inline">{locale === "en" ? "AR" : "EN"}</span>
+              <span className="hidden sm:inline">{locale.toUpperCase()}</span>
             </button>
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

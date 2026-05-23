@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   MessageSquare,
+  Mail,
+  Bell,
   Heart,
   Upload,
   BarChart3,
@@ -24,6 +26,8 @@ import { useApp } from "@/context/app-context";
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" as const },
   { href: "/dashboard/chat", icon: MessageSquare, key: "aiChat" as const },
+  { href: "/dashboard/messages", icon: Mail, key: "messages" as const },
+  { href: "/dashboard/notifications", icon: Bell, key: "notifications" as const },
   { href: "/dashboard/know-yourself", icon: Heart, key: "knowYourself" as const },
   { href: "/dashboard/upload", icon: Upload, key: "uploadFiles" as const },
   { href: "/dashboard/books", icon: BookOpen, key: "askBook" as const },

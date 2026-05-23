@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   User, Shield, Palette, Globe, Bell, Bot, Lock, LogOut,
@@ -33,6 +33,16 @@ export default function SettingsPage() {
 
   // AI preference
   const [aiPersonality, setAiPersonality] = useState(userProfile?.aiPersonality || "Friendly Tutor");
+
+  // Sync form with loaded profile
+  useEffect(() => {
+    if (!userProfile) return;
+    setFullName(userProfile.fullName || "");
+    setNickname(userProfile.nickname || "");
+    setBirthDate(userProfile.birthDate || "");
+    setGrade(userProfile.grade || "");
+    setAiPersonality(userProfile.aiPersonality || "Friendly Tutor");
+  }, [userProfile]);
 
   // Status Alerts
   const [statusMsg, setStatusMsg] = useState("");
@@ -92,9 +102,15 @@ export default function SettingsPage() {
   };
 
   const handleSavePreferences = async (personality: string) => {
-    setAiPersonality(personality);
-    await updateProfileAndSettings({ aiPersonality: personality });
-    showAlert(`AI tutor personality updated to: ${personality}`, "success");
+    setLoading(true);
+    const success = await updateProfileAndSettings({ aiPersonality: personality });
+    setLoading(false);
+    if (success) {
+      setAiPersonality(personality);
+      showAlert(`AI tutor personality updated to: ${personality}`, "success");
+    } else {
+      showAlert("Failed to update AI personality. Please try again.", "error");
+    }
   };
 
   const handleLogout = async () => {

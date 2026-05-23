@@ -64,15 +64,15 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  /* Fix selection text visibility */
+  /* Fix selection text visibility - use theme-aware text color */
   ::selection {
     background-color: var(--accent);
-    color: #FFFFFF;
+    color: var(--text-primary);
   }
 
   ::-moz-selection {
     background-color: var(--accent);
-    color: #FFFFFF;
+    color: var(--text-primary);
   }
 }
 

@@ -1,45 +1,133 @@
 "use client";
 
+import { useMemo } from "react";
 import { AnimatedChart } from "@/components/ui/animated-chart";
 import { GlassCard } from "@/components/ui/glass-card";
 import { BarChart3, TrendingUp, Clock, Smile } from "lucide-react";
 import { useApp } from "@/context/app-context";
 
+const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export default function AnalyticsPage() {
-  const { grades, streak, xp } = useApp();
+  const { grades, streak, xp, sessions } = useApp();
 
-  const averageGrade = grades.length
-    ? Math.round(grades.reduce((sum, grade) => sum + grade.score, 0) / grades.length)
-    : 0;
+  const averageGrade = useMemo(
+    () => (grades.length ? Math.round(grades.reduce((sum, grade) => sum + grade.score, 0) / grades.length) : 0),
+    [grades]
+  );
 
-  const studyHours = grades.length * 2 + streak * 1;
-  const attendance = grades.length ? Math.min(100, 70 + streak * 3) : 0;
-  const mood = grades.length ? Math.min(100, 50 + Math.floor(streak * 4)) : 0;
+  const studyHours = useMemo(
+    () => Math.round(sessions.reduce((sum, session) => sum + session.duration / 60, 0)),
+    [sessions]
+  );
 
-  const gradeTrendData = grades.length
-    ? grades.map((grade) => ({ name: grade.date, value: grade.score }))
-    : [{ name: "No grades yet", value: 0 }];
+  const attendance = useMemo(() => {
+    const uniqueDays = new Set(sessions.map((session) => new Date(session.date).toISOString().slice(0, 10)));
+    return Math.min(100, Math.round((uniqueDays.size / 5) * 100));
+  }, [sessions]);
 
-  const attendanceData = grades.length
-    ? Array.from({ length: 7 }).map((_, index) => ({
-        name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
-        value: Math.min(100, 70 + index * 4),
-      }))
-    : Array.from({ length: 7 }).map((_, index) => ({ name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index], value: 0 }));
+  const mood = useMemo(() => {
+    if (!sessions.length) return 0;
+    const averageFocus = sessions.reduce((sum, session) => sum + session.focusLevel, 0) / sessions.length;
+    return Math.round(Math.min(100, averageFocus));
+  }, [sessions]);
 
-  const studyHoursData = grades.length
-    ? Array.from({ length: 7 }).map((_, index) => ({
-        name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
-        value: 1 + index * 1.5,
-      }))
-    : Array.from({ length: 7 }).map((_, index) => ({ name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index], value: 0 }));
+  const gradeTrendData = useMemo(
+    () =>
+      grades
+        .slice()
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .map((grade) => ({ name: grade.date, value: grade.score })),
+    [grades]
+  );
 
-  const moodData = grades.length
-    ? Array.from({ length: 7 }).map((_, index) => ({
-        name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
-        value: Math.min(100, 50 + index * 6),
-      }))
-    : Array.from({ length: 7 }).map((_, index) => ({ name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index], value: 0 }));
+  const studyHoursData = useMemo(() => {
+    const map = new Map<string, number>();
+    const today = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      map.set(d.toISOString().slice(0, 10), 0);
+    }
+
+    sessions.forEach((session) => {
+      const key = new Date(session.date).toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + session.duration / 60);
+    });
+
+    return Array.from(map.entries()).map(([date, value]) => ({
+      name: weekDays[new Date(date).getDay()],
+      value: Number(value.toFixed(1)),
+    }));
+  }, [sessions]);
+
+  const moodData = useMemo(() => {
+    const map = new Map<string, { total: number; count: number }>();
+    const today = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      map.set(d.toISOString().slice(0, 10), { total: 0, count: 0 });
+    }
+
+    sessions.forEach((session) => {
+      const key = new Date(session.date).toISOString().slice(0, 10);
+      const record = map.get(key) ?? { total: 0, count: 0 };
+      record.total += session.focusLevel;
+      record.count += 1;
+      map.set(key, record);
+    });
+
+    return Array.from(map.entries()).map(([date, record]) => ({
+      name: weekDays[new Date(date).getDay()],
+      value: record.count ? Math.round(record.total / record.count) : 0,
+    }));
+  }, [sessions]);
+
+  const attendanceData = useMemo(() => {
+    const map = new Map<string, number>();
+    const today = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      map.set(d.toISOString().slice(0, 10), 0);
+    }
+
+    const presentDays = new Set(sessions.map((session) => new Date(session.date).toISOString().slice(0, 10)));
+    presentDays.forEach((day) => {
+      if (map.has(day)) {
+        map.set(day, 100);
+      }
+    });
+
+    return Array.from(map.entries()).map(([date, value]) => ({
+      name: weekDays[new Date(date).getDay()],
+      value,
+    }));
+  }, [sessions]);
+
+  const focusData = useMemo(() => {
+    const map = new Map<string, { total: number; count: number }>();
+    const today = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      map.set(d.toISOString().slice(0, 10), { total: 0, count: 0 });
+    }
+
+    sessions.forEach((session) => {
+      const key = new Date(session.date).toISOString().slice(0, 10);
+      const record = map.get(key) ?? { total: 0, count: 0 };
+      record.total += session.focusLevel;
+      record.count += 1;
+      map.set(key, record);
+    });
+
+    return Array.from(map.entries()).map(([date, record]) => ({
+      name: weekDays[new Date(date).getDay()],
+      value: record.count ? Math.round(record.total / record.count) : 0,
+    }));
+  }, [sessions]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -49,8 +137,8 @@ export default function AnalyticsPage() {
         {[
           { icon: TrendingUp, label: "Average Grade", value: grades.length ? `${averageGrade}%` : "0%", color: "#6C63FF" },
           { icon: Clock, label: "Study Hours", value: `${studyHours}h`, color: "#00D4FF" },
-          { icon: BarChart3, label: "Attendance", value: grades.length ? `${attendance}%` : "0%", color: "#22C55E" },
-          { icon: Smile, label: "Mood Score", value: grades.length ? `${mood}%` : "0%", color: "#F59E0B" },
+          { icon: BarChart3, label: "Attendance", value: sessions.length ? `${attendance}%` : "0%", color: "#22C55E" },
+          { icon: Smile, label: "Mood Score", value: sessions.length ? `${mood}%` : "0%", color: "#F59E0B" },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -74,7 +162,7 @@ export default function AnalyticsPage() {
         <AnimatedChart title="Attendance" type="bar" data={attendanceData} color="#22C55E" />
         <AnimatedChart title="Study Hours" type="line" data={studyHoursData} color="#00D4FF" />
         <AnimatedChart title="Mood Tracking" type="area" data={moodData} color="#F59E0B" />
-        <AnimatedChart title="Focus Level" type="line" color="#6C63FF" />
+        <AnimatedChart title="Focus Level" type="line" data={focusData} color="#6C63FF" />
       </div>
     </div>
   );

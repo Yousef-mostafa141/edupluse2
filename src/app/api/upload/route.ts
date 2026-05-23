@@ -38,6 +38,12 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Enforce file size limit (100MB)
+    const MAX_SIZE = 100 * 1024 * 1024;
+    if (buffer.length > MAX_SIZE) {
+      return NextResponse.json({ error: "File exceeds maximum allowed size of 100MB" }, { status: 400 });
+    }
     
     // Create upload directory if it does not exist
     const uploadDir = path.join(process.cwd(), "public", "uploads");
@@ -58,45 +64,54 @@ export async function POST(request: Request) {
       fileText = buffer.toString("utf-8").slice(0, 3000); // Grab first 3000 chars
     }
 
-    // Call Gemini to generate a real study summary
+    // Call Gemini to generate a real study summary (backend-only, with retry + timeout)
     let aiSummary = `This is a summary of ${file.name}.`;
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey) {
-      try {
-        const promptText = fileText 
-          ? `You are an expert tutor. Please summarize the following study material:\n\n${fileText}`
-          : `You are an expert tutor. A student in ${user.grade || "Grade 11"} uploaded a study file named "${file.name}". Please generate a comprehensive, structured study summary and key concepts list for this topic so they can learn it.`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const promptText = fileText
+        ? `You are an expert tutor. Please summarize the following study material:\n\n${fileText}`
+        : `You are an expert tutor. A student uploaded a study file named "${file.name}". Please generate a structured study summary and key concepts list for this topic.`;
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-          {
+      let attempt = 0;
+      let response: Response | null = null;
+      let payload: any = null;
+      while (attempt < 2) {
+        attempt++;
+        try {
+          response = await fetch(url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`,
             },
+            signal: controller.signal,
             body: JSON.stringify({
               contents: [
                 {
                   parts: [
-                    {
-                      text: promptText,
-                    },
+                    { text: promptText },
                   ],
                 },
               ],
             }),
-          }
-        );
+          });
 
-        if (response.ok) {
-          const payload = await response.json();
-          if (payload.candidates?.[0]?.content?.parts?.[0]?.text) {
-            aiSummary = payload.candidates[0].content.parts[0].text;
-          }
+          payload = await response.json();
+          if (response.ok) break;
+          console.warn("Gemini upload attempt failed:", { attempt, status: response.status, payload });
+        } catch (err: any) {
+          console.error("Gemini upload error attempt", attempt, err?.message || err);
         }
-      } catch (err) {
-        console.error("Gemini failed during upload analysis:", err);
+      }
+
+      clearTimeout(timeout);
+
+      if (response && response.ok && payload?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        aiSummary = payload.candidates[0].content.parts[0].text;
       }
     }
 

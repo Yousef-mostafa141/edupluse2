@@ -13,7 +13,6 @@ import { useApp, UserProfile } from "@/context/app-context";
 export default function SignupPage() {
   const { t, signup } = useApp();
   const router = useRouter();
-  const [isGoogle, setIsGoogle] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     nickname: "",
@@ -22,22 +21,19 @@ export default function SignupPage() {
     email: "",
     password: "",
   });
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setIsGoogle(params.get("method") === "google");
-    }
-  }, []);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (key: keyof UserProfile | "password") =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       setFormData((prev) => ({ ...prev, [key]: event.target.value }));
     };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const isValidEmail = (email: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
 
     if (
       !formData.fullName ||
@@ -51,7 +47,18 @@ export default function SignupPage() {
       return;
     }
 
-    const success = signup(
+    if (!isValidEmail(formData.email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsLoading(true);
+    const result = await signup(
       {
         fullName: formData.fullName,
         nickname: formData.nickname,
@@ -61,11 +68,12 @@ export default function SignupPage() {
       },
       formData.password
     );
+    setIsLoading(false);
 
-    if (success) {
+    if (result.success) {
       router.push("/dashboard");
     } else {
-      setError("Unable to create account. Please try again.");
+      setError(result.error || "Unable to create account. Please try again.");
     }
   };
 
@@ -96,12 +104,10 @@ export default function SignupPage() {
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-display font-bold">{isGoogle ? "Google account setup" : t("signup")}</h1>
-              {isGoogle && (
-                <p className="text-sm text-muted mt-1">
-                  Continue with Google by entering your name, birth date, email, and a password.
-                </p>
-              )}
+              <h1 className="text-2xl font-display font-bold">{t("signup")}</h1>
+              <p className="text-sm text-muted mt-1">
+                Create your EduPulse account with a secure email and password.
+              </p>
             </div>
           </div>
 

@@ -17,7 +17,21 @@ export async function PUT(request: Request) {
       currentPassword, newPassword 
     } = body;
 
-    // Fetch user details from DB to verify password or check details
+    const allowedThemes = ["light", "dark"];
+    const allowedLocales = ["en", "ar"];
+
+    if (theme !== undefined && !allowedThemes.includes(theme)) {
+      return NextResponse.json({ error: "Invalid theme selection." }, { status: 400 });
+    }
+
+    if (locale !== undefined && !allowedLocales.includes(locale)) {
+      return NextResponse.json({ error: "Invalid locale selection." }, { status: 400 });
+    }
+
+    if (newPassword && typeof newPassword === "string" && newPassword.length < 8) {
+      return NextResponse.json({ error: "New password must be at least 8 characters." }, { status: 400 });
+    }
+
     const dbUser = await db.user.findUnique({
       where: { id: user.userId },
     });

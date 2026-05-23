@@ -74,20 +74,48 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const updated = await db.task.update({
+    const taskUpdates: any = {
+      title: title !== undefined ? title : existing.title,
+      description: description !== undefined ? description : existing.description,
+      subject: subject !== undefined ? subject : existing.subject,
+      dueDate: dueDate !== undefined ? dueDate : existing.dueDate,
+      priority: priority !== undefined ? priority : existing.priority,
+      completed: completed !== undefined ? completed : existing.completed,
+    };
+
+    const shouldAwardXp = completed === true && existing.completed === false;
+    const completedToIncomplete = completed === false && existing.completed === true;
+
+    const updatedTask = await db.task.update({
       where: { id },
-      data: {
-        title: title !== undefined ? title : existing.title,
-        description: description !== undefined ? description : existing.description,
-        subject: subject !== undefined ? subject : existing.subject,
-        dueDate: dueDate !== undefined ? dueDate : existing.dueDate,
-        priority: priority !== undefined ? priority : existing.priority,
-        completed: completed !== undefined ? completed : existing.completed,
-      },
+      data: taskUpdates,
     });
 
-    return NextResponse.json(updated);
+    let xp: number | undefined;
+
+    if (shouldAwardXp) {
+      const rewardByPriority: Record<string, number> = {
+        high: 50,
+        medium: 30,
+        low: 20,
+      };
+      const points = rewardByPriority[updatedTask.priority] ?? 20;
+      const updatedUser = await db.user.update({
+        where: { id: user.userId },
+        data: { xp: { increment: points } },
+      });
+      xp = updatedUser.xp;
+    } else if (completedToIncomplete) {
+      const updatedUser = await db.user.update({
+        where: { id: user.userId },
+        data: { xp: { decrement: 10 } },
+      });
+      xp = Math.max(0, updatedUser.xp);
+    }
+
+    return NextResponse.json({ task: updatedTask, xp });
   } catch (error) {
+    console.error("Task update error:", error);
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }

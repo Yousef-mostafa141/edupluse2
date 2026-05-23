@@ -23,31 +23,29 @@ export default function TasksPage() {
     priority: "medium",
   });
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (!formData.title.trim() || !formData.subject.trim() || !formData.dueDate) {
       return;
     }
 
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      subject: formData.subject,
+    const payload = {
+      title: formData.title.trim(),
+      description: formData.description.trim(),
+      subject: formData.subject.trim(),
       dueDate: formData.dueDate,
       priority: formData.priority,
-      completed: false,
-      createdAt: new Date().toISOString(),
     };
 
-    addTask(newTask);
+    const success = await addTask(payload);
+    if (!success) {
+      return;
+    }
+
     setFormData({ title: "", description: "", subject: "", dueDate: "", priority: "medium" });
     setShowForm(false);
   };
 
   const handleToggleTask = (task: Task) => {
-    if (!task.completed) {
-      addXp(task.priority === "high" ? 50 : task.priority === "medium" ? 30 : 20);
-    }
     updateTask(task.id, { completed: !task.completed });
   };
 
