@@ -1,170 +1,367 @@
 "use client";
 
-import { useTheme } from "next-themes";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  User, Shield, Palette, Globe, Bell, Bot, Lock, Accessibility, Info, LogOut,
-  ChevronRight, Moon, Sun,
+  User, Shield, Palette, Globe, Bell, Bot, Lock, LogOut,
+  Moon, Sun, CheckCircle, AlertTriangle
 } from "lucide-react";
 import { useApp } from "@/context/app-context";
-
-const sections = [
-  { icon: User, label: "Profile", desc: "Name, avatar, nickname" },
-  { icon: Shield, label: "Account", desc: "Email, password, security" },
-  { icon: Palette, label: "Appearance", desc: "Theme, colors, display" },
-  { icon: Globe, label: "Language", desc: "Arabic / English" },
-  { icon: Bell, label: "Notifications", desc: "Alerts and reminders" },
-  { icon: Bot, label: "AI Preferences", desc: "Personality, voice settings" },
-  { icon: Lock, label: "Privacy", desc: "Data and permissions" },
-  { icon: Accessibility, label: "Accessibility", desc: "Font size, contrast" },
-  { icon: Info, label: "About", desc: "Version, support, legal" },
-];
+import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
-  const { theme, setTheme } = useTheme();
-  const { locale, setLocale, userName, setUserName, grades, addGrade, userProfile } = useApp();
-  const [subject, setSubject] = useState("");
-  const [score, setScore] = useState("");
-  const [message, setMessage] = useState("");
+  const { 
+    theme, setTheme, 
+    locale, setLocale, 
+    userProfile, updateProfileAndSettings, logout 
+  } = useApp();
+  const router = useRouter();
 
-  const handleAddGrade = () => {
-    const scoreValue = Number(score);
-    if (!subject.trim() || !score.trim() || Number.isNaN(scoreValue) || scoreValue < 0 || scoreValue > 100) {
-      setMessage("Enter a valid subject and score between 0 and 100.");
-      return;
-    }
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<"profile" | "account" | "appearance" | "preferences">("profile");
 
-    addGrade({ subject: subject.trim(), score: scoreValue, date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }) });
-    setSubject("");
-    setScore("");
-    setMessage("Grade added successfully.");
+  // Profile Form States
+  const [fullName, setFullName] = useState(userProfile?.fullName || "");
+  const [nickname, setNickname] = useState(userProfile?.nickname || "");
+  const [birthDate, setBirthDate] = useState(userProfile?.birthDate || "");
+  const [grade, setGrade] = useState(userProfile?.grade || "");
+
+  // Security Form States
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // AI preference
+  const [aiPersonality, setAiPersonality] = useState(userProfile?.aiPersonality || "Friendly Tutor");
+
+  // Status Alerts
+  const [statusMsg, setStatusMsg] = useState("");
+  const [statusType, setStatusType] = useState<"success" | "error" | "">("");
+  const [loading, setLoading] = useState(false);
+
+  const showAlert = (msg: string, type: "success" | "error") => {
+    setStatusMsg(msg);
+    setStatusType(type);
+    setTimeout(() => {
+      setStatusMsg("");
+      setStatusType("");
+    }, 4000);
   };
 
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const success = await updateProfileAndSettings({
+      fullName,
+      nickname,
+      birthDate,
+      grade,
+    });
+    setLoading(false);
+    if (success) {
+      showAlert("Profile updated successfully!", "success");
+    } else {
+      showAlert("Failed to update profile. Please try again.", "error");
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showAlert("Please fill in all password fields.", "error");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showAlert("New passwords do not match.", "error");
+      return;
+    }
+    setLoading(true);
+    const success = await updateProfileAndSettings({
+      currentPassword,
+      newPassword,
+    });
+    setLoading(false);
+    if (success) {
+      showAlert("Password updated successfully!", "success");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } else {
+      showAlert("Incorrect current password or update failed.", "error");
+    }
+  };
+
+  const handleSavePreferences = async (personality: string) => {
+    setAiPersonality(personality);
+    await updateProfileAndSettings({ aiPersonality: personality });
+    showAlert(`AI tutor personality updated to: ${personality}`, "success");
+  };
+
+  const handleLogout = async () => {
+    logout();
+    router.push("/login");
+  };
+
+  const menuItems = [
+    { id: "profile" as const, label: "Profile", desc: "Name, nickname, school grade", icon: User },
+    { id: "account" as const, label: "Security", desc: "Change account password", icon: Shield },
+    { id: "appearance" as const, label: "Appearance", desc: "System theme & language", icon: Palette },
+    { id: "preferences" as const, label: "AI Preferences", desc: "AI personality settings", icon: Bot },
+  ];
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <h1 className="text-2xl font-display font-bold">Settings</h1>
 
-      <div className="glass-card rounded-2xl p-6 flex items-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-accent-gradient flex items-center justify-center text-2xl font-bold">
-          {userName[0]}
-        </div>
-        <div className="flex-1">
-          <input
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            className="font-bold text-lg bg-transparent outline-none border-b border-transparent focus:border-accent-primary/50 w-full"
-          />
-          <p className="text-sm text-muted">{userProfile?.grade || "Grade not set"} • Level {Math.max(1, Math.floor((grades.length * 2 + 1) / 5))}</p>
-        </div>
-      </div>
-
-      <div className="glass-card rounded-2xl p-6 space-y-4">
-        <h2 className="font-semibold">Add Grade</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Subject"
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] outline-none"
-          />
-          <input
-            value={score}
-            onChange={(e) => setScore(e.target.value)}
-            placeholder="Score (0-100)"
-            type="number"
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] outline-none"
-          />
-        </div>
-        <button
-          onClick={handleAddGrade}
-          className="w-full rounded-2xl bg-accent-primary px-4 py-3 text-white font-semibold hover:opacity-90 transition"
+      {statusMsg && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-4 rounded-xl flex items-center gap-3 border ${
+            statusType === "success" 
+              ? "bg-success/15 border-success/30 text-success" 
+              : "bg-danger/15 border-danger/30 text-danger"
+          }`}
         >
-          Save Grade
-        </button>
-        {message && <p className="text-sm text-muted">{message}</p>}
-        {grades.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Recent Grades</p>
-            <div className="grid gap-2">
-              {grades.slice(-4).reverse().map((grade, index) => (
-                <div key={`${grade.subject}-${index}`} className="glass-card p-3 rounded-2xl flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{grade.subject}</p>
-                    <p className="text-xs text-muted">{grade.date}</p>
-                  </div>
-                  <span className="text-sm font-bold">{grade.score}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          {statusType === "success" ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          <span className="text-sm font-medium">{statusMsg}</span>
+        </motion.div>
+      )}
 
-      <div className="glass-card rounded-2xl overflow-hidden divide-y divide-[var(--border)]">
-        {sections.map((s) => {
-          const Icon = s.icon;
-          return (
-            <motion.button
-              key={s.label}
-              className="w-full flex items-center gap-4 p-4 hover:bg-white/5 transition-colors text-left"
-              whileHover={{ x: 4 }}
+      <div className="grid lg:grid-cols-3 gap-6 items-start">
+        {/* Navigation Sidebar */}
+        <div className="glass-card rounded-2xl p-4 space-y-1">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-4 p-3 rounded-xl transition text-left ${
+                  active ? "bg-accent-primary/20 text-accent-primary" : "hover:bg-white/5 text-muted hover:text-white"
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${active ? "bg-accent-primary/20" : "bg-white/5"}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">{item.label}</p>
+                  <p className="text-xs text-muted/80">{item.desc}</p>
+                </div>
+              </button>
+            );
+          })}
+          
+          <div className="pt-4 border-t border-[var(--border)] mt-4">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-4 p-3 rounded-xl text-danger hover:bg-danger/15 transition text-left"
             >
-              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-muted" />
+              <div className="w-10 h-10 rounded-lg bg-danger/10 flex items-center justify-center">
+                <LogOut className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-sm">{s.label}</p>
-                <p className="text-xs text-muted">{s.desc}</p>
+                <p className="font-semibold text-sm">Logout</p>
+                <p className="text-xs text-danger/80">End your session</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-muted" />
-            </motion.button>
-          );
-        })}
-      </div>
-
-      <div className="glass-card rounded-2xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Dark / Light Mode</span>
-          <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl glass text-sm"
-          >
-            {theme === "dark" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            {theme === "dark" ? "Dark" : "Light"}
-          </button>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Language</span>
-          <button
-            onClick={() => setLocale(locale === "en" ? "ar" : "en")}
-            className="px-3 py-1.5 rounded-xl glass text-sm"
-          >
-            {locale === "en" ? "English" : "العربية"}
-          </button>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">AI Personality</span>
-          <select className="px-3 py-1.5 rounded-xl glass text-sm bg-transparent outline-none">
-            <option>Friendly Tutor</option>
-            <option>Strict Coach</option>
-            <option>Calm Mentor</option>
-          </select>
-        </div>
-        {["Study reminders", "Streak alerts", "Mood check-ins"].map((n) => (
-          <div key={n} className="flex items-center justify-between">
-            <span className="text-sm">{n}</span>
-            <div className="w-10 h-6 rounded-full bg-accent-primary relative cursor-pointer">
-              <div className="absolute right-1 top-1 w-4 h-4 rounded-full bg-white" />
-            </div>
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
 
-      <button className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl text-danger hover:bg-danger/10 transition-colors">
-        <LogOut className="w-5 h-5" />
-        Logout
-      </button>
+        {/* Content Pane */}
+        <div className="lg:col-span-2 glass-card rounded-2xl p-6 min-h-[400px]">
+          {activeTab === "profile" && (
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+                <User className="w-5 h-5 text-accent-primary" /> Profile Settings
+              </h2>
+              
+              <div>
+                <label className="text-xs text-muted block mb-1">Full Name</label>
+                <input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted block mb-1">Nickname (Display Name)</label>
+                <input
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  placeholder="Johnny"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted block mb-1">Email (Unchangeable)</label>
+                <input
+                  value={userProfile?.email || ""}
+                  disabled
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] text-muted cursor-not-allowed opacity-50 outline-none"
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-muted block mb-1">Birth Date</label>
+                  <input
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted block mb-1">School Grade</label>
+                  <input
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                    placeholder="Grade 11"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-accent-primary hover:opacity-90 transition rounded-xl text-white font-semibold py-3 mt-4"
+              >
+                {loading ? "Saving Changes..." : "Save Profile Details"}
+              </button>
+            </form>
+          )}
+
+          {activeTab === "account" && (
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+                <Lock className="w-5 h-5 text-accent-primary" /> Security & Password
+              </h2>
+
+              {userProfile?.email === "guest@edupulse.ai" && (
+                <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl text-warning text-xs">
+                  Password changes are disabled for the guest sandbox account.
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-muted block mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  disabled={userProfile?.email === "guest@edupulse.ai"}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted block mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={userProfile?.email === "guest@edupulse.ai"}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted block mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={userProfile?.email === "guest@edupulse.ai"}
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-[var(--border)] focus:border-accent-primary/50 outline-none"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || userProfile?.email === "guest@edupulse.ai"}
+                className="w-full bg-accent-primary hover:opacity-90 transition rounded-xl text-white font-semibold py-3 mt-4 disabled:opacity-50"
+              >
+                {loading ? "Updating Password..." : "Update Password"}
+              </button>
+            </form>
+          )}
+
+          {activeTab === "appearance" && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+                <Palette className="w-5 h-5 text-accent-primary" /> Visual Preferences
+              </h2>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-xl glass border border-[var(--border)]">
+                  <div>
+                    <p className="font-semibold text-sm">Theme Settings</p>
+                    <p className="text-xs text-muted">Switch between dark and light modes</p>
+                  </div>
+                  <button
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-[var(--border)] hover:bg-white/10 text-sm transition"
+                  >
+                    {theme === "dark" ? <Moon className="w-4 h-4 text-warning" /> : <Sun className="w-4 h-4 text-yellow-500" />}
+                    {theme === "dark" ? "Dark Mode" : "Light Mode"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-xl glass border border-[var(--border)]">
+                  <div>
+                    <p className="font-semibold text-sm">System Language</p>
+                    <p className="text-xs text-muted">اختر لغة واجهة المستخدم المفضلة لديك</p>
+                  </div>
+                  <button
+                    onClick={() => setLocale(locale === "en" ? "ar" : "en")}
+                    className="px-4 py-2 rounded-xl bg-white/5 border border-[var(--border)] hover:bg-white/10 text-sm font-semibold transition"
+                  >
+                    {locale === "en" ? "العربية (RTL)" : "English (LTR)"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "preferences" && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+                <Bot className="w-5 h-5 text-accent-primary" /> AI Companion Tutor
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-muted block mb-1">AI Tutor Personality</label>
+                  <select
+                    value={aiPersonality}
+                    onChange={(e) => handleSavePreferences(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-neutral-900 border border-[var(--border)] focus:border-accent-primary/50 outline-none text-white text-sm"
+                  >
+                    <option value="Friendly Tutor">Friendly Tutor (Explains with encouraging, step-by-step guidance)</option>
+                    <option value="Strict Coach">Strict Coach (Focuses heavily on core rules and drills)</option>
+                    <option value="Calm Mentor">Calm Mentor (Philosophical, relaxing explanation style)</option>
+                  </select>
+                </div>
+
+                <div className="p-4 rounded-xl bg-accent-primary/5 border border-accent-primary/20 text-xs text-muted leading-relaxed">
+                  The selected AI personality alters the system instruction headers sent to Google Gemini, changing how your smart tutor responds to questions, summaries, and quizzes.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

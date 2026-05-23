@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { Locale, translations, TranslationKey } from "@/lib/i18n";
 
 export interface GradeEntry {
+  id?: string;
   subject: string;
   score: number;
   date: string;
@@ -39,27 +40,18 @@ export interface StudySession {
 }
 
 export interface UserProfile {
+  id?: string;
   fullName: string;
   nickname: string;
   email: string;
   birthDate: string;
   grade: string;
-}
-
-interface StoredCredential {
-  profile: UserProfile;
-  password: string;
-  progress: {
-    xp: number;
-    streak: number;
-    lastActiveDate: string | null;
-    grades: GradeEntry[];
-    tasks: Task[];
-    goals: Goal[];
-    sessions: StudySession[];
-    locale: Locale;
-    theme: "light" | "dark";
-  };
+  role?: string;
+  xp?: number;
+  streak?: number;
+  theme?: "light" | "dark";
+  locale?: Locale;
+  aiPersonality?: string;
 }
 
 interface AppContextType {
@@ -79,49 +71,28 @@ interface AppContextType {
   showOnboarding: boolean;
   setShowOnboarding: (v: boolean) => void;
   addXp: (amount: number) => void;
-  addGrade: (grade: GradeEntry) => void;
-  addTask: (task: Task) => void;
-  updateTask: (id: string, updates: Partial<Task>) => void;
-  deleteTask: (id: string) => void;
-  addGoal: (goal: Goal) => void;
-  updateGoal: (id: string, updates: Partial<Goal>) => void;
-  deleteGoal: (id: string) => void;
-  addSession: (session: StudySession) => void;
+  addGrade: (grade: GradeEntry) => Promise<boolean>;
+  addTask: (task: Omit<Task, "id" | "createdAt" | "completed">) => Promise<boolean>;
+  updateTask: (id: string, updates: Partial<Task>) => Promise<boolean>;
+  deleteTask: (id: string) => Promise<boolean>;
+  addGoal: (goal: Omit<Goal, "id" | "createdAt" | "progress">) => Promise<boolean>;
+  updateGoal: (id: string, updates: Partial<Goal>) => Promise<boolean>;
+  deleteGoal: (id: string) => Promise<boolean>;
+  addSession: (session: Omit<StudySession, "id">) => Promise<boolean>;
   userName: string;
   setUserName: (n: string) => void;
   isAuthenticated: boolean;
   authLoaded: boolean;
-  login: (email: string, password: string) => boolean;
-  loginAsGuest: () => void;
-  signup: (profile: UserProfile, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  googleLogin: (idToken: string) => Promise<boolean>;
+  signup: (profile: UserProfile, password: string) => Promise<boolean>;
   logout: () => void;
   userProfile: UserProfile | null;
+  updateProfileAndSettings: (updates: Partial<UserProfile> & { currentPassword?: string; newPassword?: string }) => Promise<boolean>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
-const STORAGE_KEY = "edupulse-auth";
-const CREDENTIAL_KEY = "edupulse-user";
-
-function getToday() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function computeStreak(prevDate: string | null | undefined, prevStreak: number) {
-  const today = getToday();
-  if (prevDate === today) {
-    return { date: today, streak: Math.max(0, prevStreak) };
-  }
-
-  const yesterday = new Date();
-  yesterday.setDate(new Date().getDate() - 1);
-  const yesterdayString = yesterday.toISOString().slice(0, 10);
-
-  if (prevDate === yesterdayString) {
-    return { date: today, streak: prevStreak + 1 };
-  }
-
-  return { date: today, streak: prevStreak > 0 ? 1 : 0 };
-}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
@@ -138,282 +109,378 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState("Ahmed");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoaded, setAuthLoaded] = useState(false);
+
   const level = Math.floor(xp / 500) + 1;
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      setAuthLoaded(true);
-      return;
-    }
+  // 1. Fetch current authenticated session on mount
+  const refreshUserData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated) {
+          setUserProfile(data.user);
+          setUserName(data.user.nickname || data.user.fullName);
+          setXp(data.user.xp ?? 0);
+          setStreak(data.user.streak ?? 0);
+          setLocaleState(data.user.locale ?? "en");
+          setThemeState(data.user.theme ?? "dark");
+          
+          // Set direction & html attributes
+          document.documentElement.lang = data.user.locale ?? "en";
+          document.documentElement.dir = (data.user.locale ?? "en") === "ar" ? "rtl" : "ltr";
+          document.documentElement.setAttribute("data-theme", data.user.theme ?? "dark");
 
-    // Load theme from localStorage
-    const savedTheme = (window.localStorage.getItem("edupulse-theme") as "light" | "dark") || "dark";
-    setThemeState(savedTheme);
-    document.documentElement.setAttribute("data-theme", savedTheme);
-
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as {
-          userProfile: UserProfile;
-          xp: number;
-          streak: number;
-          locale: Locale;
-          lastActiveDate: string | null;
-          grades: GradeEntry[];
-          tasks: Task[];
-          goals: Goal[];
-          sessions: StudySession[];
-          theme: "light" | "dark";
-        };
-
-        const { date, streak: updatedStreak } = computeStreak(parsed.lastActiveDate, parsed.streak);
-
-        setUserProfile(parsed.userProfile);
-        setUserName(parsed.userProfile.nickname || parsed.userProfile.fullName);
-        setXp(parsed.xp ?? 0);
-        setStreak(updatedStreak);
-        setLocaleState(parsed.locale ?? "en");
-        setThemeState(parsed.theme ?? "dark");
-        setLastActiveDate(date);
-        setGrades(parsed.grades ?? []);
-        setTasks(parsed.tasks ?? []);
-        setGoals(parsed.goals ?? []);
-        setSessions(parsed.sessions ?? []);
-        setIsAuthenticated(true);
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+          // Bind progress lists
+          setGrades(data.progress.grades ?? []);
+          setTasks(data.progress.tasks ?? []);
+          setGoals(data.progress.goals ?? []);
+          setSessions(data.progress.sessions ?? []);
+          setIsAuthenticated(true);
+        }
       }
+    } catch (err) {
+      console.error("Failed to load user session:", err);
+    } finally {
+      setAuthLoaded(true);
     }
-
-    setAuthLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (!authLoaded) return;
+    refreshUserData();
+  }, [refreshUserData]);
 
-    if (isAuthenticated && userProfile) {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          userProfile,
-          xp,
-          streak,
-          locale,
-          theme,
-          lastActiveDate,
-          grades,
-          tasks,
-          goals,
-          sessions,
-        })
-      );
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [authLoaded, isAuthenticated, userProfile, xp, streak, locale, theme, lastActiveDate, grades, tasks, goals, sessions]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (isAuthenticated && userProfile?.email !== "guest@edupulse.ai") {
-      const stored = window.localStorage.getItem(CREDENTIAL_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as StoredCredential;
-          if (userProfile && parsed.profile.email === userProfile.email) {
-            window.localStorage.setItem(
-              CREDENTIAL_KEY,
-              JSON.stringify({
-                ...parsed,
-                progress: {
-                  xp,
-                  streak,
-                  lastActiveDate,
-                  grades,
-                  locale,
-                },
-              })
-            );
-          }
-        } catch {
-          // ignore invalid credential file
-        }
-      }
-    }
-  }, [isAuthenticated, userProfile, xp, streak, lastActiveDate, grades, locale]);
-
+  // Handle local document directions on locale changes
   useEffect(() => {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
   }, [locale]);
 
+  // Handle theme classes
   useEffect(() => {
-    if (typeof window === "undefined") return;
     document.documentElement.setAttribute("data-theme", theme);
-    window.localStorage.setItem("edupulse-theme", theme);
   }, [theme]);
 
-  const setLocale = useCallback((l: Locale) => {
+  const setLocale = useCallback(async (l: Locale) => {
     setLocaleState(l);
-  }, []);
+    if (isAuthenticated && userProfile) {
+      try {
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ locale: l }),
+        });
+      } catch (err) {
+        console.error("Failed to save locale:", err);
+      }
+    }
+  }, [isAuthenticated, userProfile]);
 
-  const setTheme = useCallback((t: "light" | "dark") => {
+  const setTheme = useCallback(async (t: "light" | "dark") => {
     setThemeState(t);
-  }, []);
+    if (isAuthenticated && userProfile) {
+      try {
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme: t }),
+        });
+      } catch (err) {
+        console.error("Failed to save theme:", err);
+      }
+    }
+  }, [isAuthenticated, userProfile]);
 
   const t = useCallback(
     (key: TranslationKey) => translations[locale][key] ?? key,
     [locale]
   );
 
-  const addXp = useCallback((amount: number) => {
+  const addXp = useCallback(async (amount: number) => {
     setXp((prev) => prev + amount);
-  }, []);
+    if (isAuthenticated && userProfile?.email !== "guest@edupulse.ai") {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xp: xp + amount }),
+      });
+    }
+  }, [isAuthenticated, userProfile, xp]);
 
-  const addGrade = useCallback((grade: GradeEntry) => {
-    setGrades((prev) => [...prev, grade]);
-    setXp((prev) => prev + Math.max(5, Math.round(grade.score / 10)));
-  }, []);
-
-  const addTask = useCallback((task: Task) => {
-    setTasks((prev) => [...prev, task]);
-  }, []);
-
-  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, ...updates } : task))
-    );
-  }, []);
-
-  const deleteTask = useCallback((id: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== id));
-  }, []);
-
-  const addGoal = useCallback((goal: Goal) => {
-    setGoals((prev) => [...prev, goal]);
-  }, []);
-
-  const updateGoal = useCallback((id: string, updates: Partial<Goal>) => {
-    setGoals((prev) =>
-      prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal))
-    );
-  }, []);
-
-  const deleteGoal = useCallback((id: string) => {
-    setGoals((prev) => prev.filter((goal) => goal.id !== id));
-  }, []);
-
-  const addSession = useCallback((session: StudySession) => {
-    setSessions((prev) => [...prev, session]);
-    setXp((prev) => prev + Math.round(session.duration / 10));
-  }, []);
-
-  const login = useCallback((email: string, password: string) => {
-    if (typeof window === "undefined") return false;
-    const stored = window.localStorage.getItem(CREDENTIAL_KEY);
-    if (!stored) return false;
-    try {
-      const parsed = JSON.parse(stored) as StoredCredential;
-      if (parsed.profile.email === email.trim() && parsed.password === password) {
-        const progress = parsed.progress ?? {
-          xp: 0,
-          streak: 0,
-          lastActiveDate: null,
-          grades: [],
-          tasks: [],
-          goals: [],
-          sessions: [],
-          locale: "en",
-          theme: "dark",
-        };
-
-        const { date, streak: updatedStreak } = computeStreak(progress.lastActiveDate, progress.streak);
-
-        setUserProfile(parsed.profile);
-        setUserName(parsed.profile.nickname || parsed.profile.fullName);
-        setXp(progress.xp ?? 0);
-        setStreak(updatedStreak);
-        setLocaleState(progress.locale ?? "en");
-        setThemeState(progress.theme ?? "dark");
-        setLastActiveDate(date);
-        setGrades(progress.grades ?? []);
-        setTasks(progress.tasks ?? []);
-        setGoals(progress.goals ?? []);
-        setSessions(progress.sessions ?? []);
-        setIsAuthenticated(true);
-        setShowOnboarding(true);
-        return true;
-      }
-      return false;
-    } catch {
+  // 2. Database Sync Helper Functions
+  const addGrade = useCallback(async (grade: GradeEntry) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot add grade");
       return false;
     }
-  }, []);
+
+    try {
+      const res = await fetch("/api/grades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(grade),
+      });
+      if (res.ok) {
+        const newGrade = await res.json();
+        setGrades((prev) => [...prev, newGrade]);
+        // XP is calculated server-side, refetch user data to get updated XP
+        await refreshUserData();
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to add grade:", err);
+    }
+    return false;
+  }, [isAuthenticated, refreshUserData]);
+
+  const addTask = useCallback(async (task: Omit<Task, "id" | "createdAt" | "completed">) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot add task");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(task),
+      });
+      if (res.ok) {
+        const newTask = await res.json();
+        setTasks((prev) => [newTask, ...prev]);
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to add task:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot update task");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...updates }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setTasks((prev) =>
+          prev.map((task) => (task.id === id ? updated : task))
+        );
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to update task:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const deleteTask = useCallback(async (id: string) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot delete task");
+      return false;
+    }
+
+    try {
+      const res = await fetch(`/api/tasks?id=${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setTasks((prev) => prev.filter((task) => task.id !== id));
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const addGoal = useCallback(async (goal: Omit<Goal, "id" | "createdAt" | "progress">) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot add goal");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/goals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(goal),
+      });
+      if (res.ok) {
+        const newGoal = await res.json();
+        setGoals((prev) => [newGoal, ...prev]);
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to add goal:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const updateGoal = useCallback(async (id: string, updates: Partial<Goal>) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot update goal");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/goals", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...updates }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setGoals((prev) =>
+          prev.map((goal) => (goal.id === id ? updated : goal))
+        );
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to update goal:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const deleteGoal = useCallback(async (id: string) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot delete goal");
+      return false;
+    }
+
+    try {
+      const res = await fetch(`/api/goals?id=${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setGoals((prev) => prev.filter((goal) => goal.id !== id));
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to delete goal:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
+
+  const addSession = useCallback(async (session: Omit<StudySession, "id">) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot add study session");
+      return false;
+    }
+
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(session),
+      });
+      if (res.ok) {
+        const newSession = await res.json();
+        setSessions((prev) => [newSession, ...prev]);
+        // Refetch user data to get updated XP
+        await refreshUserData();
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to add session:", err);
+    }
+    return false;
+  }, [isAuthenticated, refreshUserData]);
+
+  // 3. User Authentication Sync Functions
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      if (res.ok) {
+        await refreshUserData();
+        return true;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    return false;
+  }, [refreshUserData]);
+
+  const googleLogin = useCallback(async (idToken: string) => {
+    try {
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      
+      if (res.ok) {
+        await refreshUserData();
+        return true;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    return false;
+  }, [refreshUserData]);
 
   const loginAsGuest = useCallback(() => {
-    const guestProfile: UserProfile = {
-      fullName: "Guest Student",
-      nickname: "Guest",
-      email: "guest@edupulse.ai",
-      birthDate: "",
-      grade: "N/A",
-    };
-
-    setUserProfile(guestProfile);
-    setUserName(guestProfile.nickname);
-    setXp(0);
-    setStreak(0);
-    setLastActiveDate(null);
-    setGrades([]);
-    setIsAuthenticated(true);
-    setShowOnboarding(true);
+    console.warn("Guest login is no longer supported - use email/password or Google OAuth");
+    return;
   }, []);
 
-  const signup = useCallback((profile: UserProfile, password: string) => {
-    if (typeof window === "undefined" || !profile.email || !password) return false;
+  const signup = useCallback(async (profile: UserProfile, password: string) => {
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...profile, password }),
+      });
+      
+      if (res.ok) {
+        await refreshUserData();
+        return true;
+      }
+    } catch (err) {
+      console.error("Signup error:", err);
+    }
+    return false;
+  }, [refreshUserData]);
 
-    const progress = {
-      xp: 0,
-      streak: 0,
-      lastActiveDate: null,
-      grades: [],
-      tasks: [],
-      goals: [],
-      sessions: [],
-      locale,
-      theme,
-    };
+  const updateProfileAndSettings = useCallback(async (updates: Partial<UserProfile> & { currentPassword?: string; newPassword?: string }) => {
+    if (!isAuthenticated) {
+      console.warn("Not authenticated - cannot update profile");
+      return false;
+    }
 
-    window.localStorage.setItem(
-      CREDENTIAL_KEY,
-      JSON.stringify({ profile, password, progress })
-    );
-
-    setUserProfile(profile);
-    setUserName(profile.nickname || profile.fullName);
-    setXp(0);
-    setStreak(0);
-    setLastActiveDate(null);
-    setGrades([]);
-    setTasks([]);
-    setGoals([]);
-    setSessions([]);
-    setIsAuthenticated(true);
-    setShowOnboarding(true);
-    return true;
-  }, [locale, theme]);
-
-  const logout = useCallback(() => {
-    setIsAuthenticated(false);
-    setUserProfile(null);
-    setUserName("Ahmed");
-    setXp(0);
-    setStreak(0);
-    setLastActiveDate(null);
-    setGrades([]);
-    setShowOnboarding(false);
-    window.localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserProfile(data.user);
+          setUserName(data.user.nickname || data.user.fullName);
+          setThemeState(data.user.theme);
+          setLocaleState(data.user.locale);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error("Profile update error:", err);
+    }
+    return false;
+  }, [isAuthenticated]);
 
   return (
     <AppContext.Provider
@@ -447,10 +514,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         authLoaded,
         login,
+        googleLogin,
         loginAsGuest,
         signup,
         logout,
         userProfile,
+        updateProfileAndSettings,
+        refreshUserData,
       }}
     >
       {children}

@@ -43,10 +43,29 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Prevent theme flash - set theme before hydration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const theme = localStorage.getItem('edupulse-theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${inter.variable} ${poppins.variable} ${sora.variable} ${cairo.variable} font-sans`}
       >
-        <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem>
+        <ThemeProvider
+          attribute="data-theme"
+          defaultTheme="dark"
+          enableSystem
+          storageKey="edupulse-theme"
+          disableTransitionOnChange
+        >
           <AppProvider>{children}</AppProvider>
         </ThemeProvider>
       </body>

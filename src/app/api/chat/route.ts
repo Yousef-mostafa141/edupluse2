@@ -1,61 +1,71 @@
 import { NextResponse } from "next/server";
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-pro-1.0";
-
-function extractResponseText(data: any) {
-  if (!data) return null;
-  if (typeof data === "string") return data;
-  if (data.candidates?.[0]?.content && typeof data.candidates[0].content[0]?.text === "string") {
-    return data.candidates[0].content[0].text;
-  }
-  if (data.output?.[0]?.content && typeof data.output[0].content[0]?.text === "string") {
-    return data.output[0].content[0].text;
-  }
-  if (data.response?.output?.[0]?.content && typeof data.response.output[0].content[0]?.text === "string") {
-    return data.response.output[0].content[0].text;
-  }
-  return null;
-}
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 export async function POST(request: Request) {
-  const { message } = await request.json();
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json({
-      text: "Gemini API key is not configured. Using offline AI mode for now. Ask any study question and the assistant will respond with local guidance.",
-    });
-  }
-
   try {
-    const response = await fetch(`https://gemini.googleapis.com/v1/models/${GEMINI_MODEL}:generate`, {
+    const { message } = await request.json();
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!message || !message.trim()) {
+      return NextResponse.json({
+        text: "Please type a message before sending.",
+      }, { status: 400 });
+    }
+
+    if (!apiKey) {
+      return NextResponse.json({
+        text: "Gemini API key is not configured in the backend environment variables. Please provide a GEMINI_API_KEY in your .env file to enable the live tutor assistant.",
+      });
+    }
+
+    // Call official Google AI Studio Gemini API Endpoint
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        prompt: {
-          text: message,
+        contents: [
+          {
+            parts: [
+              {
+                text: message,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
         },
-        temperature: 0.7,
-        maxOutputTokens: 512,
       }),
     });
 
     const payload = await response.json();
 
     if (!response.ok) {
+      console.error("Gemini API error payload:", payload);
       return NextResponse.json({
-        text: payload.error?.message ?? "Gemini returned an error.",
+        text: `Gemini API returned an error: ${payload.error?.message ?? "Unknown error"}. Please check your key configuration.`,
       });
     }
 
-    const text = extractResponseText(payload) ?? "Gemini did not return a valid response.";
-    return NextResponse.json({ text });
-  } catch (error) {
+    const aiText = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!aiText) {
+      return NextResponse.json({
+        text: "I received an empty response from the AI model. Please try rephrasing your question.",
+      });
+    }
+
+    return NextResponse.json({ text: aiText });
+  } catch (error: any) {
+    console.error("Gemini connection exception:", error);
     return NextResponse.json({
-      text: "Failed to connect to Gemini. Please verify your API key and network.",
-    });
+      text: "Failed to connect to Gemini API. Please verify your internet connection or backend configuration.",
+    }, { status: 500 });
   }
 }
