@@ -68,3 +68,4 @@ Open [http://localhost:3000](http://localhost:3000)
 **Dark Mode:** `#0B1020` bg, `#6C63FF` primary, `#00D4FF` accent  
 **Light Mode:** `#F5F7FF` bg, `#6C63FF` primary  
 **Fonts:** Inter, Poppins, Sora (EN) · Cairo (AR)
+
